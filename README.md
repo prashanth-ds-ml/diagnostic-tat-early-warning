@@ -1,11 +1,11 @@
 # Diagnostic TAT Early Warning Agent
 
-Local Problem 9 prototype. It monitors the interim diagnostic checkpoint,
+Problem 9 prototype. It monitors the interim diagnostic checkpoint,
 scores the probability of an SLA breach, ranks an operational queue, and
-drafts consent-checked patient delay notifications for staff review.
+emails new at-risk-order alerts to a configured diagnostics operations inbox.
 
-All inputs are synthetic. The application does not send notifications and
-does not push data or code to any remote service.
+All bundled inputs are synthetic. Email sending requires explicit SMTP
+configuration and the `--send` flag.
 
 ## GCP Cloud Shell setup
 
@@ -32,6 +32,8 @@ export DIAGNOSTIC_DATA_DIR=/path/to/yashoda-synthetic-buildlab/op_diagnostics
 - `dashboard.py`: Streamlit operations dashboard.
 - `api.py`: FastAPI risk and queue endpoints.
 - `evaluate.py`: held-out test evaluation and prediction export.
+- `alert_runner.py`: automated scoring, deduplication, and SMTP email alerts.
+- `watch_alerts.py`: continuously runs the alert workflow at a configured interval.
 - `tests/`: focused risk and consent-gate tests.
 - `WALKTHROUGH.md`: step-by-step build explanation, demo script, and documentation map.
 
@@ -58,6 +60,7 @@ python evaluate.py
 python -m pytest
 python -m streamlit run dashboard.py
 python -m uvicorn api:app --reload
+python alert_runner.py
 ```
 
 API documentation is available at `http://127.0.0.1:8000/docs`.
@@ -78,3 +81,49 @@ python -m streamlit run dashboard.py --server.port 8080
 
 The current production baseline is retrospective detection, which provides
 zero proactive warning. Evaluation results are written to `output/metrics.json`.
+
+## Automated email alerts
+
+The bundled patient data does not contain email addresses. The automated
+runner therefore sends operational alerts to a configured diagnostics inbox,
+including the patient notification-consent status for staff action.
+
+Configure SMTP using environment variables. Never commit credentials:
+
+```bash
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USERNAME=your-account@example.com
+export SMTP_PASSWORD='app-password-from-secret-manager'
+export SMTP_SENDER=your-account@example.com
+export ALERT_RECIPIENTS=diagnostics-operations@example.com
+```
+
+Preview the complete flow without sending:
+
+```bash
+python alert_runner.py --max-alerts 5
+```
+
+Send new alerts directly:
+
+```bash
+python alert_runner.py --send --max-alerts 25
+```
+
+For a continuously running VM or local demo:
+
+```bash
+python watch_alerts.py --send --interval-seconds 300
+```
+
+Sent order IDs are stored in `runtime/alert_state.json`, preventing duplicate
+emails on a persistent filesystem. Schedule the command using cron or a Cloud
+Run Job. For horizontally scaled production deployment, replace the local
+state file with a shared transactional store such as Firestore.
+
+Example cron entry, every five minutes:
+
+```cron
+*/5 * * * * cd /path/to/diagnostic-tat-early-warning && .venv/bin/python alert_runner.py --send
+```

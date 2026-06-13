@@ -11,6 +11,7 @@ interim checkpoint and prepare proactive, review-gated patient notifications.
 - Ranked operational queue and Streamlit dashboard.
 - FastAPI risk and queue endpoints.
 - Consent-checked notification drafts requiring staff approval.
+- Automated SMTP operations alerts with deduplication and continuous watcher.
 - Held-out and June 1-13 evaluation.
 
 ## Measured results
