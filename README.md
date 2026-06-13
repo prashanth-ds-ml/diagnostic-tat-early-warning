@@ -30,6 +30,7 @@ export DIAGNOSTIC_DATA_DIR=/path/to/yashoda-synthetic-buildlab/op_diagnostics
 
 - `risk_engine.py`: explainable checkpoint-time risk scoring and notification drafts.
 - `dashboard.py`: Streamlit operations dashboard.
+- `frontend/`: React command center and Trigger Lab.
 - `api.py`: FastAPI risk and queue endpoints.
 - `evaluate.py`: held-out test evaluation and prediction export.
 - `alert_runner.py`: automated scoring, deduplication, and SMTP email alerts.
@@ -58,20 +59,31 @@ From this directory:
 ```powershell
 python evaluate.py
 python -m pytest
-python -m streamlit run dashboard.py
 python -m uvicorn api:app --reload
 python alert_runner.py
 ```
 
 API documentation is available at `http://127.0.0.1:8000/docs`.
 
-In Cloud Shell, use Web Preview for the Streamlit port:
+In a second terminal, start the React dashboard:
 
 ```bash
-python -m streamlit run dashboard.py --server.port 8080
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-The dashboard includes a **Trigger Lab**. Enter checkpoint inputs, calculate
+Open `http://127.0.0.1:5173`.
+
+For Cloud Shell, run the React frontend on port `8080`, set the deployed
+backend URL, and use Web Preview:
+
+```bash
+cd frontend
+VITE_API_URL=https://YOUR-BACKEND-URL npm run dev -- --host 0.0.0.0 --port 8080
+```
+
+The React dashboard includes a **Trigger Lab**. Enter checkpoint inputs, calculate
 risk, preview the generated alert, and select:
 
 - **Trigger local alert**: writes a `.eml` message to `runtime/outbox/`.

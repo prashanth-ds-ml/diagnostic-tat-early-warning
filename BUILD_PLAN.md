@@ -8,7 +8,7 @@ interim checkpoint and prepare proactive, review-gated patient notifications.
 ## Delivered
 
 - Explainable checkpoint-time breach risk score.
-- Ranked operational queue and Streamlit dashboard.
+- React command center with ranked queue, alert review, Trigger Lab, and delivery setup.
 - FastAPI risk and queue endpoints.
 - Consent-checked notification drafts requiring staff approval.
 - Automated SMTP operations alerts with deduplication and continuous watcher.
