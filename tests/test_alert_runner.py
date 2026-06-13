@@ -1,6 +1,12 @@
 import pandas as pd
 
-from alert_runner import build_email, save_email_to_outbox, select_alerts
+from alert_runner import (
+    build_email,
+    list_text_messages,
+    save_email_to_outbox,
+    save_text_message,
+    select_alerts,
+)
 
 
 def test_select_alerts_filters_risk_and_deduplicates():
@@ -74,3 +80,34 @@ def test_email_can_be_saved_to_local_outbox(tmp_path):
     path = save_email_to_outbox(email, tmp_path)
     assert path.exists()
     assert b"Diagnostic SLA alert" in path.read_bytes()
+
+
+def test_patient_text_can_be_saved_and_opened(tmp_path):
+    alerts = select_alerts(
+        pd.DataFrame(
+            [
+                {
+                    "order_id": "ORD-SMS",
+                    "patient_id": "PAT-1",
+                    "test_code": "CBC",
+                    "test_category": "hematology",
+                    "priority": "routine",
+                    "order_time": "2026-06-13T10:00:00",
+                    "promised_completion_window_hours": 4,
+                    "elapsed_at_checkpoint_hours": 2,
+                    "expected_remaining_hours": 4,
+                    "on_track_at_checkpoint": False,
+                }
+            ]
+        ),
+        pd.DataFrame([{"patient_id": "PAT-1", "notification_opt_in": True}]),
+        set(),
+        0.4,
+        1,
+        True,
+    )
+    alert = alerts[0]
+    save_text_message(alert["order"], alert["risk"], alert["notification"], tmp_path)
+    messages = list_text_messages(tmp_path)
+    assert messages[0]["status"] == "local_demo_delivered"
+    assert "taking longer" in messages[0]["message"]

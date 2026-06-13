@@ -86,8 +86,27 @@ VITE_API_URL=https://YOUR-BACKEND-URL npm run dev -- --host 0.0.0.0 --port 8080
 The React dashboard includes a **Trigger Lab**. Enter checkpoint inputs, calculate
 risk, preview the generated alert, and select:
 
-- **Trigger local alert**: writes a `.eml` message to `runtime/outbox/`.
-- **Send SMTP alert**: sends to the entered operations mailbox after explicit confirmation.
+- **Trigger patient text**: saves a consent-gated text message into `runtime/sms_inbox/`.
+- **Patient Messages**: opens the local SMS inbox and displays the message in a phone preview.
+
+The Trigger Lab takes:
+
+- `order_time`
+- `specimen_received_time`
+- `test_started_time`
+- test code, category, priority, promised SLA, and consent
+
+It derives:
+
+```text
+order_to_specimen = specimen_received_time - order_time
+specimen_to_start = test_started_time - specimen_received_time
+elapsed_at_checkpoint = test_started_time - order_time
+expected_remaining = historical median started-to-completed time
+projected_total = elapsed_at_checkpoint + expected_remaining
+```
+
+The alert fires when the derived risk crosses the configured threshold.
 
 ## Decision policy
 

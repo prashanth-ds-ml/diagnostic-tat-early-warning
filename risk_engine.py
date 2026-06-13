@@ -4,6 +4,7 @@ import math
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,65 @@ class RiskResult:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def hours_between(start: Any, end: Any) -> float:
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    hours = (end_ts - start_ts).total_seconds() / 3600
+    if hours < 0:
+        raise ValueError("Lifecycle timestamps must be chronological.")
+    return hours
+
+
+@lru_cache(maxsize=1)
+def lifecycle_profiles() -> pd.DataFrame:
+    orders = pd.read_csv(DATA_DIR / "synthetic_diagnostic_orders.csv")
+    orders["started_to_complete_hours"] = (
+        pd.to_datetime(orders["test_completed_time"])
+        - pd.to_datetime(orders["test_started_time"])
+    ).dt.total_seconds() / 3600
+    profiles = (
+        orders.groupby(["test_code", "priority"], as_index=False)
+        .agg(
+            promised_completion_window_hours=("promised_completion_window_hours", "median"),
+            expected_remaining_hours=("started_to_complete_hours", "median"),
+        )
+    )
+    return profiles
+
+
+def derive_checkpoint_order(order: dict[str, Any]) -> dict[str, Any]:
+    derived = dict(order)
+    order_to_specimen = hours_between(order["order_time"], order["specimen_received_time"])
+    specimen_to_start = hours_between(order["specimen_received_time"], order["test_started_time"])
+    elapsed = hours_between(order["order_time"], order["test_started_time"])
+
+    profiles = lifecycle_profiles()
+    match = profiles[
+        (profiles["test_code"] == order["test_code"])
+        & (profiles["priority"] == order["priority"])
+    ]
+    if match.empty:
+        raise ValueError("No historical lifecycle profile exists for this test and priority.")
+
+    profile = match.iloc[0]
+    promised = float(
+        order.get("promised_completion_window_hours")
+        or profile["promised_completion_window_hours"]
+    )
+    expected_remaining = float(profile["expected_remaining_hours"])
+    derived.update(
+        {
+            "promised_completion_window_hours": promised,
+            "elapsed_at_checkpoint_hours": elapsed,
+            "expected_remaining_hours": expected_remaining,
+            "on_track_at_checkpoint": elapsed + expected_remaining <= promised,
+            "order_to_specimen_hours": round(order_to_specimen, 2),
+            "specimen_to_start_hours": round(specimen_to_start, 2),
+        }
+    )
+    return derived
 
 
 def _as_bool(value: Any) -> bool:

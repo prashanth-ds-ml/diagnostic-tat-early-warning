@@ -19,6 +19,7 @@ from risk_engine import draft_notification, load_data, score_order
 APP_DIR = Path(__file__).resolve().parent
 DEFAULT_STATE_FILE = APP_DIR / "runtime" / "alert_state.json"
 DEFAULT_OUTBOX = APP_DIR / "runtime" / "outbox"
+DEFAULT_SMS_INBOX = APP_DIR / "runtime" / "sms_inbox"
 
 
 @dataclass
@@ -180,6 +181,39 @@ def save_email_to_outbox(message: EmailMessage, outbox: Path = DEFAULT_OUTBOX) -
     path = outbox / f"diagnostic-alert-{timestamp}.eml"
     path.write_bytes(message.as_bytes())
     return path
+
+
+def save_text_message(
+    order: dict[str, Any],
+    risk: Any,
+    notification: dict[str, Any],
+    inbox: Path = DEFAULT_SMS_INBOX,
+) -> Path:
+    if not notification.get("message"):
+        raise ValueError("Patient text message is blocked because consent is unavailable.")
+    inbox.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    payload = {
+        "message_id": f"SMS-{timestamp}-{risk.order_id}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "order_id": risk.order_id,
+        "patient_id": risk.patient_id,
+        "test_code": order["test_code"],
+        "risk_level": risk.risk_level,
+        "breach_probability": risk.breach_probability,
+        "status": "local_demo_delivered",
+        "message": notification["message"],
+    }
+    path = inbox / f"{payload['message_id']}.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def list_text_messages(inbox: Path = DEFAULT_SMS_INBOX) -> list[dict[str, Any]]:
+    if not inbox.exists():
+        return []
+    messages = [json.loads(path.read_text(encoding="utf-8")) for path in inbox.glob("*.json")]
+    return sorted(messages, key=lambda item: item["created_at"], reverse=True)
 
 
 def run(

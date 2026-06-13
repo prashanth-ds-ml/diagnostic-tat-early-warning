@@ -9,6 +9,7 @@ interim checkpoint and prepare proactive, review-gated patient notifications.
 
 - Explainable checkpoint-time breach risk score.
 - React command center with ranked queue, alert review, Trigger Lab, and delivery setup.
+- Timestamp-derived checkpoint scoring and a local patient-text inbox with phone preview.
 - FastAPI risk and queue endpoints.
 - Consent-checked notification drafts requiring staff approval.
 - Automated SMTP operations alerts with deduplication and continuous watcher.

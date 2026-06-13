@@ -39,3 +39,24 @@ def test_simulate_and_local_trigger():
     )
     assert trigger.status_code == 200
     assert trigger.json()["status"] == "saved_local"
+
+
+def test_lifecycle_simulation_and_text_trigger():
+    lifecycle = {
+        "order_id": "LOCAL-LIFECYCLE-TEST",
+        "patient_id": "LOCAL-PATIENT",
+        "test_code": "CBC",
+        "test_category": "hematology",
+        "priority": "routine",
+        "order_time": "2026-06-13T08:00:00",
+        "specimen_received_time": "2026-06-13T10:00:00",
+        "test_started_time": "2026-06-13T12:00:00",
+        "promised_completion_window_hours": 4,
+        "notification_opt_in": True,
+    }
+    result = client.post("/simulate-lifecycle", json=lifecycle)
+    assert result.status_code == 200
+    assert result.json()["derived_features"]["elapsed_at_checkpoint_hours"] == 4
+    text = client.post("/trigger-text", json=lifecycle)
+    assert text.status_code == 200
+    assert text.json()["message"]["message"]

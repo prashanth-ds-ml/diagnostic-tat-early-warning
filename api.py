@@ -8,8 +8,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from alert_runner import MailConfig, build_email, save_email_to_outbox, send_email
+from alert_runner import (
+    MailConfig,
+    build_email,
+    list_text_messages,
+    save_email_to_outbox,
+    save_text_message,
+    send_email,
+)
 from risk_engine import (
+    derive_checkpoint_order,
     draft_notification,
     enrich_with_resource_context,
     load_data,
@@ -55,6 +63,19 @@ class SimulatedOrder(BaseModel):
 class TriggerRequest(BaseModel):
     order: SimulatedOrder
     delivery: str = "local"
+
+
+class LifecycleOrder(BaseModel):
+    order_id: str = "LOCAL-DEMO-001"
+    patient_id: str = "LOCAL-PATIENT"
+    test_code: str
+    test_category: str
+    priority: str = "routine"
+    order_time: str
+    specimen_received_time: str
+    test_started_time: str
+    promised_completion_window_hours: float | None = Field(default=None, gt=0)
+    notification_opt_in: bool = True
 
 
 @lru_cache(maxsize=1)
@@ -165,6 +186,49 @@ def queue(limit: int = 100, minimum_probability: float = 0.4) -> list[dict[str, 
 @app.post("/simulate")
 def simulate(order: SimulatedOrder) -> dict[str, Any]:
     return create_alert(order.model_dump(exclude={"notification_opt_in", "recipient"}), order.notification_opt_in)
+
+
+@app.post("/simulate-lifecycle")
+def simulate_lifecycle(order: LifecycleOrder) -> dict[str, Any]:
+    try:
+        derived = derive_checkpoint_order(order.model_dump(exclude={"notification_opt_in"}))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    alert = create_alert(derived, order.notification_opt_in)
+    alert["derived_features"] = {
+        "order_to_specimen_hours": derived["order_to_specimen_hours"],
+        "specimen_to_start_hours": derived["specimen_to_start_hours"],
+        "elapsed_at_checkpoint_hours": round(derived["elapsed_at_checkpoint_hours"], 2),
+        "expected_remaining_hours": round(derived["expected_remaining_hours"], 2),
+        "promised_completion_window_hours": round(
+            derived["promised_completion_window_hours"], 2
+        ),
+        "on_track_at_checkpoint": derived["on_track_at_checkpoint"],
+    }
+    return alert
+
+
+@app.post("/trigger-text")
+def trigger_text(order: LifecycleOrder) -> dict[str, Any]:
+    if not order.notification_opt_in:
+        raise HTTPException(status_code=400, detail="Patient notification consent is required.")
+    try:
+        derived = derive_checkpoint_order(order.model_dump(exclude={"notification_opt_in"}))
+        risk = score_order(derived)
+        notification = draft_notification(derived, risk, True)
+        path = save_text_message(derived, risk, notification)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "status": "local_text_delivered",
+        "path": str(path),
+        "message": list_text_messages()[0],
+    }
+
+
+@app.get("/messages")
+def messages() -> list[dict[str, Any]]:
+    return list_text_messages()
 
 
 @app.post("/trigger")

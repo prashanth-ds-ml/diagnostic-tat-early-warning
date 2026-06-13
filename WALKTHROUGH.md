@@ -61,6 +61,12 @@ be known at the checkpoint in a real deployment.
 
 ## 4. The core risk calculation
 
+For the local Trigger Lab, the operator enters `order_time`,
+`specimen_received_time`, and `test_started_time`. The system derives the
+order-to-specimen delay, specimen-to-start queue delay, and total elapsed
+checkpoint time. Expected remaining time comes from the historical median
+started-to-completed duration for the selected test code and priority.
+
 We first calculate the expected total turnaround:
 
 ```text
