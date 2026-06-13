@@ -135,12 +135,19 @@ def dashboard(minimum_probability: float = 0.4) -> dict[str, Any]:
 
 
 @app.get("/options")
-def options() -> dict[str, list[str]]:
+def options() -> dict[str, Any]:
     _, _, _, queue = data()
+    test_code_categories = (
+        queue[["test_code", "test_category"]]
+        .drop_duplicates("test_code")
+        .set_index("test_code")["test_category"]
+        .to_dict()
+    )
     return {
         "test_codes": sorted(queue["test_code"].unique().tolist()),
         "test_categories": sorted(queue["test_category"].unique().tolist()),
         "priorities": ["routine", "urgent", "stat"],
+        "test_code_categories": test_code_categories,
     }
 
 
@@ -204,6 +211,9 @@ def simulate_lifecycle(order: LifecycleOrder) -> dict[str, Any]:
             derived["promised_completion_window_hours"], 2
         ),
         "on_track_at_checkpoint": derived["on_track_at_checkpoint"],
+        "calibration_bucket": derived["calibration_bucket"],
+        "historical_peer_count": derived["historical_peer_count"],
+        "score_method": alert["risk"]["score_method"],
     }
     return alert
 

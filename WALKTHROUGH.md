@@ -67,6 +67,11 @@ order-to-specimen delay, specimen-to-start queue delay, and total elapsed
 checkpoint time. Expected remaining time comes from the historical median
 started-to-completed duration for the selected test code and priority.
 
+The timestamp-demo probability is calibrated from historical March-May orders
+in the same projected-slip-ratio range. The dashboard shows the calibration
+bucket and peer count, avoiding the previous heuristic probability and abrupt
+off-track score floor.
+
 We first calculate the expected total turnaround:
 
 ```text

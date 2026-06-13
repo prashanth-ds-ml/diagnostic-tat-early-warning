@@ -33,6 +33,8 @@ class RiskResult:
     promised_completion_time: str
     recommended_action: str
     reasons: list[str]
+    score_method: str
+    historical_peer_count: int | None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -50,13 +52,17 @@ def hours_between(start: Any, end: Any) -> float:
 @lru_cache(maxsize=1)
 def lifecycle_profiles() -> pd.DataFrame:
     orders = pd.read_csv(DATA_DIR / "synthetic_diagnostic_orders.csv")
-    orders["started_to_complete_hours"] = (
-        pd.to_datetime(orders["test_completed_time"])
-        - pd.to_datetime(orders["test_started_time"])
+    historical = orders[pd.to_datetime(orders["order_time"]) < pd.Timestamp("2026-06-01")].copy()
+    if historical.empty:
+        historical = orders.copy()
+    historical["started_to_complete_hours"] = (
+        pd.to_datetime(historical["test_completed_time"])
+        - pd.to_datetime(historical["test_started_time"])
     ).dt.total_seconds() / 3600
     profiles = (
-        orders.groupby(["test_code", "priority"], as_index=False)
+        historical.groupby(["test_code", "priority"], as_index=False)
         .agg(
+            test_category=("test_category", "first"),
             promised_completion_window_hours=("promised_completion_window_hours", "median"),
             expected_remaining_hours=("started_to_complete_hours", "median"),
         )
@@ -86,6 +92,7 @@ def derive_checkpoint_order(order: dict[str, Any]) -> dict[str, Any]:
     expected_remaining = float(profile["expected_remaining_hours"])
     derived.update(
         {
+            "test_category": profile["test_category"],
             "promised_completion_window_hours": promised,
             "elapsed_at_checkpoint_hours": elapsed,
             "expected_remaining_hours": expected_remaining,
@@ -94,7 +101,61 @@ def derive_checkpoint_order(order: dict[str, Any]) -> dict[str, Any]:
             "specimen_to_start_hours": round(specimen_to_start, 2),
         }
     )
+    calibrated_probability, peer_count, bucket = calibrated_lifecycle_probability(derived)
+    derived.update(
+        {
+            "calibrated_breach_probability": calibrated_probability,
+            "historical_peer_count": peer_count,
+            "calibration_bucket": bucket,
+        }
+    )
     return derived
+
+
+@lru_cache(maxsize=1)
+def lifecycle_calibration() -> pd.DataFrame:
+    orders = pd.read_csv(DATA_DIR / "synthetic_diagnostic_orders.csv")
+    historical = orders[pd.to_datetime(orders["order_time"]) < pd.Timestamp("2026-06-01")].copy()
+    if historical.empty:
+        historical = orders.copy()
+    historical["elapsed"] = (
+        pd.to_datetime(historical["test_started_time"]) - pd.to_datetime(historical["order_time"])
+    ).dt.total_seconds() / 3600
+    profile_lookup = lifecycle_profiles().set_index(["test_code", "priority"])
+    historical["expected_remaining"] = [
+        profile_lookup.loc[(test_code, priority), "expected_remaining_hours"]
+        for test_code, priority in zip(historical["test_code"], historical["priority"])
+    ]
+    historical["projected_slip_ratio"] = (
+        historical["elapsed"]
+        + historical["expected_remaining"]
+        - historical["promised_completion_window_hours"]
+    ) / historical["promised_completion_window_hours"].clip(lower=0.1)
+    historical["breach"] = historical["slip_complete_hours"].gt(0)
+    bins = [-math.inf, -0.5, -0.25, -0.1, 0, 0.1, 0.25, 0.5, 1, math.inf]
+    historical["bucket"] = pd.cut(historical["projected_slip_ratio"], bins=bins)
+    return (
+        historical.groupby("bucket", observed=True)["breach"]
+        .agg(["count", "mean"])
+        .reset_index()
+    )
+
+
+def calibrated_lifecycle_probability(order: dict[str, Any]) -> tuple[float, int, str]:
+    promised = max(float(order["promised_completion_window_hours"]), 0.1)
+    ratio = (
+        float(order["elapsed_at_checkpoint_hours"])
+        + float(order["expected_remaining_hours"])
+        - promised
+    ) / promised
+    calibration = lifecycle_calibration()
+    row = calibration[
+        calibration["bucket"].map(lambda bucket: ratio in bucket)
+    ]
+    if row.empty:
+        raise ValueError("Unable to calibrate lifecycle risk for the entered timestamps.")
+    selected = row.iloc[0]
+    return round(float(selected["mean"]), 4), int(selected["count"]), str(selected["bucket"])
 
 
 def _as_bool(value: Any) -> bool:
@@ -118,10 +179,17 @@ def score_order(order: dict[str, Any]) -> RiskResult:
         str(order.get("priority", "")).lower(), 0.0
     )
     probability = _sigmoid(3.7 * projected_slip_ratio + priority_adjustment)
+    score_method = "heuristic checkpoint score"
+    historical_peer_count = None
+
+    if "calibrated_breach_probability" in order:
+        probability = float(order["calibrated_breach_probability"])
+        score_method = "historical test-start calibration"
+        historical_peer_count = int(order["historical_peer_count"])
 
     # The checkpoint flag is a transparent operational rule, not a trained feature.
     on_track = _as_bool(order.get("on_track_at_checkpoint", projected_slip <= 0))
-    if not on_track:
+    if not on_track and "calibrated_breach_probability" not in order:
         probability = max(probability, 0.70)
 
     if probability >= 0.80:
@@ -147,6 +215,11 @@ def score_order(order: dict[str, Any]) -> RiskResult:
         f"{elapsed / promised:.0%} of the promised window was used by the checkpoint.",
         f"Checkpoint status is {'on track' if on_track else 'off track'}.",
     ]
+    if "calibration_bucket" in order:
+        reasons.append(
+            f"Historical breach rate for projected-slip bucket {order['calibration_bucket']}: "
+            f"{probability:.1%} across {historical_peer_count:,} prior orders."
+        )
     if str(order.get("priority", "")).lower() == "routine":
         reasons.append("Routine orders have less operational priority than urgent/stat orders.")
 
@@ -161,6 +234,8 @@ def score_order(order: dict[str, Any]) -> RiskResult:
         promised_completion_time=promised_time.isoformat(timespec="minutes"),
         recommended_action=action,
         reasons=reasons,
+        score_method=score_method,
+        historical_peer_count=historical_peer_count,
     )
 
 

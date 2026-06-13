@@ -1,4 +1,4 @@
-from risk_engine import draft_notification, score_order
+from risk_engine import derive_checkpoint_order, draft_notification, score_order
 
 
 ORDER = {
@@ -29,3 +29,22 @@ def test_notification_requires_consent_and_review():
     assert allowed["status"] == "draft_pending_review"
     assert allowed["requires_staff_approval"] is True
 
+
+def test_lifecycle_score_is_calibrated_and_increases_with_delay():
+    base = {
+        "order_id": "ORD-LIFECYCLE",
+        "patient_id": "PAT-TEST",
+        "test_code": "CBC",
+        "test_category": "hematology",
+        "priority": "routine",
+        "order_time": "2026-06-13T08:00:00",
+        "specimen_received_time": "2026-06-13T09:00:00",
+        "promised_completion_window_hours": 4,
+    }
+    early = derive_checkpoint_order({**base, "test_started_time": "2026-06-13T09:30:00"})
+    late = derive_checkpoint_order({**base, "test_started_time": "2026-06-13T12:00:00"})
+    early_risk = score_order(early)
+    late_risk = score_order(late)
+    assert late_risk.breach_probability > early_risk.breach_probability
+    assert late_risk.score_method == "historical test-start calibration"
+    assert late_risk.historical_peer_count > 0

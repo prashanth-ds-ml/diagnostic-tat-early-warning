@@ -106,7 +106,10 @@ expected_remaining = historical median started-to-completed time
 projected_total = elapsed_at_checkpoint + expected_remaining
 ```
 
-The alert fires when the derived risk crosses the configured threshold.
+The timestamp-demo risk score is the observed breach rate among historical
+March-May orders in the same projected-slip range. The dashboard displays the
+calibration bucket and historical peer count behind the score. The alert fires
+when this calibrated risk crosses the configured threshold.
 
 ## Decision policy
 

@@ -56,7 +56,7 @@ function App() {
   const [view, setView] = useState("command");
   const [dashboard, setDashboard] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [options, setOptions] = useState({ test_codes: [], test_categories: [], priorities: [] });
+  const [options, setOptions] = useState({ test_codes: [], test_categories: [], priorities: [], test_code_categories: {} });
   const [threshold, setThreshold] = useState(.4);
   const [selected, setSelected] = useState(null);
   const [message, setMessage] = useState("");
@@ -77,7 +77,10 @@ function App() {
       api("/options"),
     ]);
     setDashboard(d); setQueue(q); setOptions(o);
-    if (o.test_codes.length && form.test_code === "CBC") setForm(f => ({ ...f, test_code: o.test_codes[0], test_category: o.test_categories[0] }));
+    if (o.test_codes.length && form.test_code === "CBC") {
+      const firstCode = o.test_codes[0];
+      setForm(f => ({ ...f, test_code: firstCode, test_category: o.test_code_categories[firstCode] }));
+    }
   };
   const loadMessages = async () => setMessages(await api("/messages"));
   useEffect(() => { load().catch(e => setMessage(e.message)); }, [threshold]);
@@ -137,14 +140,14 @@ function App() {
 
       {view === "trigger" && <section className="trigger-grid"><form className="panel" onSubmit={simulate}><small>LOCAL SIMULATION</small><h2>Enter checkpoint inputs</h2><div className="form-grid">
         {["order_id", "patient_id"].map(name => <label key={name}>{name.replaceAll("_", " ")}<input value={form[name]} onChange={e => setForm({ ...form, [name]: e.target.value })} /></label>)}
-        <label>Test<select value={form.test_code} onChange={e => setForm({ ...form, test_code: e.target.value })}>{options.test_codes.map(x => <option key={x}>{x}</option>)}</select></label>
-        <label>Category<select value={form.test_category} onChange={e => setForm({ ...form, test_category: e.target.value })}>{options.test_categories.map(x => <option key={x}>{x}</option>)}</select></label>
+        <label>Test<select value={form.test_code} onChange={e => setForm({ ...form, test_code: e.target.value, test_category: options.test_code_categories[e.target.value] })}>{options.test_codes.map(x => <option key={x}>{x}</option>)}</select></label>
+        <label>Category<input value={form.test_category} disabled /></label>
         <label>Priority<select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>{options.priorities.map(x => <option key={x}>{x}</option>)}</select></label>
         {[["order_time","Order time"],["specimen_received_time","Specimen received time"],["test_started_time","Test started time"]].map(([name,label]) => <label key={name}>{label}<input type="datetime-local" value={form[name]} onChange={e => setForm({ ...form, [name]: e.target.value })} /></label>)}
         <label>Promised SLA hours<input type="number" step=".5" value={form.promised_completion_window_hours} onChange={e => setForm({ ...form, promised_completion_window_hours: Number(e.target.value) })} /></label>
         <label className="check"><input type="checkbox" checked={form.notification_opt_in} onChange={e => setForm({ ...form, notification_opt_in: e.target.checked })} /> Patient consent available</label>
       </div><button className="primary" type="submit">Calculate risk</button></form>
-      <article className="panel result"><small>RISK RESULT</small><h2>Derived checkpoint output</h2>{!simulation ? <div className="empty">Provide lifecycle timestamps and calculate risk.</div> : <><div className="risk-orb" style={{ "--risk": riskColor[simulation.risk.risk_level] }}><strong>{Math.round(simulation.risk.breach_probability * 100)}%</strong><span>{simulation.risk.risk_level} risk</span></div><div className="derived-grid">{Object.entries(simulation.derived_features).map(([key,value]) => <div key={key}><small>{key.replaceAll("_"," ")}</small><b>{typeof value === "boolean" ? (value ? "Yes" : "No") : value}</b></div>)}</div><h3>{simulation.risk.projected_slip_hours > 0 ? `Projected ${simulation.risk.projected_slip_hours} hours late` : "Projected within SLA"}</h3>{simulation.risk.reasons.map(x => <p className="reason" key={x}>{x}</p>)}<div className="trigger-actions"><button className="primary" onClick={triggerText}>Trigger patient text</button><button onClick={() => { loadMessages(); setView("messages"); }}>Open message inbox</button></div></>}</article></section>}
+      <article className="panel result"><small>CALIBRATED RISK RESULT</small><h2>Derived checkpoint output</h2>{!simulation ? <div className="empty">Provide lifecycle timestamps and calculate risk.</div> : <><div className="risk-orb" style={{ "--risk": riskColor[simulation.risk.risk_level] }}><strong>{Math.round(simulation.risk.breach_probability * 100)}%</strong><span>{simulation.risk.risk_level} risk</span></div><p className="calibration-note">Empirical breach rate from <b>{simulation.risk.historical_peer_count?.toLocaleString()}</b> historical orders in the same projected-slip range.</p><div className="derived-grid">{Object.entries(simulation.derived_features).map(([key,value]) => <div key={key}><small>{key.replaceAll("_"," ")}</small><b>{typeof value === "boolean" ? (value ? "Yes" : "No") : value}</b></div>)}</div><h3>{simulation.risk.projected_slip_hours > 0 ? `Projected ${simulation.risk.projected_slip_hours} hours late` : "Projected within SLA"}</h3>{simulation.risk.reasons.map(x => <p className="reason" key={x}>{x}</p>)}<div className="trigger-actions"><button className="primary" onClick={triggerText}>Trigger patient text</button><button onClick={() => { loadMessages(); setView("messages"); }}>Open message inbox</button></div></>}</article></section>}
 
       {view === "messages" && <section className="messages-grid"><article className="panel"><div className="panel-title"><div><small>LOCAL SMS INBOX</small><h2>Triggered patient messages</h2></div><button onClick={loadMessages}>Refresh</button></div><div className="message-list">{messages.length === 0 ? <div className="empty">No patient text messages have been triggered yet.</div> : messages.map(item => <button key={item.message_id} onClick={() => setOpenedMessage(item)} className={openedMessage?.message_id === item.message_id ? "selected" : ""}><div><b>{item.test_code.replaceAll("_"," ")}</b><small>{item.order_id} · {item.patient_id}</small></div><span>{Math.round(item.breach_probability*100)}%</span></button>)}</div></article><article className="panel phone-panel"><small>MESSAGE PREVIEW</small>{!openedMessage ? <div className="empty">Open a message from the inbox.</div> : <div className="phone"><div className="phone-top">Messages</div><div className="contact">Yashoda Diagnostics<small>{openedMessage.status.replaceAll("_"," ")}</small></div><div className="bubble">{openedMessage.message}</div><div className="message-meta">Triggered for {openedMessage.order_id}<br/>{new Date(openedMessage.created_at).toLocaleString()}</div></div>}</article></section>}
 
