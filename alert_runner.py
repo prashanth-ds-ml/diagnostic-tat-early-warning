@@ -18,6 +18,7 @@ from risk_engine import draft_notification, load_data, score_order
 
 APP_DIR = Path(__file__).resolve().parent
 DEFAULT_STATE_FILE = APP_DIR / "runtime" / "alert_state.json"
+DEFAULT_OUTBOX = APP_DIR / "runtime" / "outbox"
 
 
 @dataclass
@@ -173,6 +174,14 @@ def send_email(message: EmailMessage, config: MailConfig) -> None:
         smtp.send_message(message)
 
 
+def save_email_to_outbox(message: EmailMessage, outbox: Path = DEFAULT_OUTBOX) -> Path:
+    outbox.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = outbox / f"diagnostic-alert-{timestamp}.eml"
+    path.write_bytes(message.as_bytes())
+    return path
+
+
 def run(
     dry_run: bool,
     threshold: float,
@@ -226,4 +235,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

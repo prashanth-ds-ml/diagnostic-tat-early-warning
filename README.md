@@ -71,6 +71,12 @@ In Cloud Shell, use Web Preview for the Streamlit port:
 python -m streamlit run dashboard.py --server.port 8080
 ```
 
+The dashboard includes a **Trigger Lab**. Enter checkpoint inputs, calculate
+risk, preview the generated alert, and select:
+
+- **Trigger local alert**: writes a `.eml` message to `runtime/outbox/`.
+- **Send SMTP alert**: sends to the entered operations mailbox after explicit confirmation.
+
 ## Decision policy
 
 - Score every order when the specimen-received checkpoint is recorded.
