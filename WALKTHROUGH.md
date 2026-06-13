@@ -28,7 +28,7 @@ zero proactive warning.
 
 ## 3. The data we used
 
-The local synthetic dataset is in `yashoda-synthetic-buildlab/op_diagnostics/`.
+The required local synthetic dataset is bundled in the application repository.
 
 ### Main order data
 
@@ -286,4 +286,3 @@ Outputs:
 | `yashoda-synthetic-buildlab/op_diagnostics/SCHEMA.md` | Column definitions and leakage warnings |
 | `yashoda-synthetic-buildlab/op_diagnostics/splits.json` | Time-based train/validation/test assignments |
 | `yashoda-synthetic-buildlab/starters/starter_p09_diagnostics_tat.py` | Problem 9 starter and baseline |
-

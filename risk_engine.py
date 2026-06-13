@@ -10,11 +10,12 @@ from typing import Any
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parent.parent
+APP_DIR = Path(__file__).resolve().parent
+ROOT = APP_DIR.parent
 DATA_DIR = Path(
     os.environ.get(
         "DIAGNOSTIC_DATA_DIR",
-        ROOT / "yashoda-synthetic-buildlab" / "op_diagnostics",
+        APP_DIR,
     )
 ).resolve()
 
@@ -130,8 +131,7 @@ def load_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if not DATA_DIR.exists():
         raise FileNotFoundError(
             f"Diagnostic data directory not found: {DATA_DIR}. "
-            "Clone yashoda-synthetic-buildlab beside this repository or set "
-            "DIAGNOSTIC_DATA_DIR."
+            "Use the bundled synthetic data or set DIAGNOSTIC_DATA_DIR."
         )
     orders = pd.read_csv(DATA_DIR / "synthetic_diagnostic_orders.csv")
     patients = pd.read_csv(DATA_DIR / "synthetic_op_patients.csv")
