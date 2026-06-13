@@ -1,0 +1,23 @@
+{
+  "test_orders": 17450,
+  "breach_rate": 0.3287106017191977,
+  "current_retroactive_warning_recall": 0.0,
+  "model_auc": 0.9528484583408046,
+  "model_threshold": 0.4,
+  "model": {
+    "true_positives": 5235,
+    "false_positives": 2024,
+    "false_negatives": 501,
+    "true_negatives": 9690,
+    "recall": 0.9126569037656904,
+    "precision": 0.7211737153877945
+  },
+  "checkpoint_rule": {
+    "true_positives": 4767,
+    "false_positives": 993,
+    "false_negatives": 969,
+    "true_negatives": 10721,
+    "recall": 0.8310669456066946,
+    "precision": 0.8276041666666667
+  }
+}
